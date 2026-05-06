@@ -19,34 +19,58 @@ jobs:
       - name: Download dependencies
         run: |
           mkdir -p lib/appinventor
-          curl -L https://github.com/mit-cml/extension-deps/raw/master/AndroidRuntime.jar -o lib/appinventor/AndroidRuntime.jar
-          curl -L https://github.com/mit-cml/extension-deps/raw/master/AnnotationProcessors.jar -o lib/appinventor/AnnotationProcessors.jar
-          curl -L https://github.com/mit-cml/extension-deps/raw/master/android.jar -o lib/appinventor/android.jar
-          curl -L https://github.com/mit-cml/extension-deps/raw/master/SimpleComponent.jar -o lib/appinventor/SimpleComponent.jar
+          
+          # URLs para as dependências do MIT App Inventor
+          BASE_URL="https://raw.githubusercontent.com/mit-cml/extension-deps/master"
+          
+          echo "Baixando dependências..."
+          for jar in AndroidRuntime.jar AnnotationProcessors.jar android.jar SimpleComponent.jar; do
+            echo "Download $jar..."
+            curl -L -f "$BASE_URL/$jar" -o "lib/appinventor/$jar" || {
+              echo "Erro ao baixar $jar de $BASE_URL. Tentando mirror alternativo..."
+              # Fallback para outro mirror se necessário
+              curl -L -f "https://github.com/mit-cml/extension-deps/blob/master/$jar?raw=true" -o "lib/appinventor/$jar"
+            }
+            
+            # Validação básica: arquivos JAR devem ter mais de 10KB
+            if [ $(stat -c%s "lib/appinventor/$jar") -lt 10000 ]; then
+              echo "ERRO: $jar parece corrompido ou é apenas um ponteiro LFS."
+              cat "lib/appinventor/$jar"
+              exit 1
+            fi
+          done
+          
+          ls -lh lib/appinventor/
       
       - name: Build with Ant
         run: |
           sudo apt-get update && sudo apt-get install -y ant-contrib zip
           
           echo "Starting build process..."
-          # Tenta o build padrão
+          # Tenta o build padrão. Se falhar, tentamos o fallback manual.
           ant clean extensions || echo "Ant failed, continuing to manual fallback"
           
           # Verifica se o arquivo foi gerado pelo Ant
           echo "Searching for Ant-generated AIX..."
-          AIX_FILE=$(find build/external_comps -name "*.aix" | head -n 1)
+          AIX_FILE=$(find build/external_comps -name "*.aix" 2>/dev/null | head -n 1)
           
-          if [ -z "$AIX_FILE" ] || [ $(stat -c%s "$AIX_FILE") -lt 3000 ]; then
-            echo "Ant build failed or produced invalid AIX (size: $(stat -c%s "$AIX_FILE" 2>/dev/null || echo 0)). Attempting manual compilation..."
+          if [ -z "$AIX_FILE" ] || [ ! -f "$AIX_FILE" ] || [ $(stat -c%s "$AIX_FILE") -lt 3000 ]; then
+            echo "Ant build failed or produced invalid AIX. Attempting manual compilation..."
             mkdir -p build/classes
             mkdir -p out
             
             echo "Compiling Java files..."
             # Compilação manual de emergência
-            # Importante: Incluir todos os jars no classpath e usar -Xlint para debug
-            javac -source 1.8 -target 1.8               -cp "lib/appinventor/*"               -d build/classes               -processor com.google.appinventor.components.scripts.ComponentProcessor               -A"outputtype=json"               $(find src -name "*.java") || { echo "Javac failed"; find src -ls; exit 1; }
+            # Definir classpath explicitamente para evitar erros de globbing
+            CP="lib/appinventor/AndroidRuntime.jar:lib/appinventor/AnnotationProcessors.jar:lib/appinventor/android.jar:lib/appinventor/SimpleComponent.jar"
             
-            echo "Javac completed successfully. Checking output directory..."
+            javac -source 1.8 -target 1.8               -cp "$CP"               -d build/classes               -processor com.google.appinventor.components.scripts.ComponentProcessor               -A"outputtype=json"               $(find src -name "*.java") || { 
+                echo "Javac failed. Verifying library integrity..."
+                for f in lib/appinventor/*.jar; do echo "$f:"; file "$f"; done
+                exit 1 
+              }
+            
+            echo "Javac completed successfully."
             find build/classes -name "*.class" || echo "No class files found!"
             
             echo "Searching for components JSON..."
