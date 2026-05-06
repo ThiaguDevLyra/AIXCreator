@@ -34,14 +34,13 @@ jobs:
             mkdir -p out
             
             # Compilação manual
-            # Nota: O processador de anotações pode gerar arquivos em caminhos diferentes dependendo da versão
+            # Nota: O processador de anotações gera os arquivos JSON
             javac -source 1.8 -target 1.8               -cp "lib/appinventor/*"               -d build/classes               -processor com.google.appinventor.components.scripts.ComponentProcessor               -A"outputtype=json"               $(find src -name "*.java") || { echo "Javac failed"; find src -ls; exit 1; }
             
             echo "Javac success. Searching for built files..."
             find build/classes -ls
             
-            # Localiza o arquivo JSON gerado pelo processador
-            # O ComponentProcessor gera simple_components.json. Vamos procurar em todo o projeto.
+            # Localiza o arquivo JSON gerado. Ele pode estar na raiz ou no diretório de saída.
             JSON_FILE=$(find . -name "simple_components.json" | head -n 1)
             if [ -z "$JSON_FILE" ]; then
               echo "Error: simple_components.json not found anywhere!"
@@ -50,28 +49,28 @@ jobs:
             fi
             
             echo "Using JSON from: $JSON_FILE"
-            # Copiamos para a raiz do build/classes para facilitar a criação do ZIP/AIX
             cp "$JSON_FILE" build/classes/simple_components.json
-            cp "$JSON_FILE" build/classes/components.json || true
+            cp "$JSON_FILE" build/classes/components.json
             
+            # O JAR deve conter apenas as classes. 
+            # É importante não incluir o JAR dentro de si mesmo se ele já existir.
+            # Vamos para a raiz das classes para manter o pacote correto (e.g. io/lyra/...)
             cd build/classes
-            # 1. Cria o AndroidRuntime.jar contendo as classes COM a estrutura de pacotes
-            # Note o '.' no final - ele inclui tudo recursivamente
-            jar cvf AndroidRuntime.jar .
+            jar cvf AndroidRuntime.jar $(find . -name "*.class") || { echo "Jar creation failed"; exit 1; }
             
             echo "AndroidRuntime.jar created. Verifying content:"
             jar tvf AndroidRuntime.jar | head -n 20
             
-            # 2. Cria o AIX final contendo o JAR e os JSONs na raiz
-            # O arquivo AIX deve ser um ZIP com estes arquivos na raiz.
-            # Kodular e outros criadores de extensões esperam estes arquivos.
+            # Cria o AIX final na raiz do projeto (../../out)
+            # O AIX deve conter AndroidRuntime.jar e os JSONs na raiz.
+            # Kodular/App Inventor aceitam components.json ou simple_components.json
             zip -j ../../out/extension.aix AndroidRuntime.jar simple_components.json components.json
             
             cd ../..
             echo "Build manual finalizado. Conteúdo do AIX gerado:"
             unzip -l out/extension.aix
             
-            # Garante que o artefato esteja no lugar esperado para o passo de upload
+            # Sincroniza o local final para o upload-artifact se necessário
             # (Já está em out/extension.aix)
           fi
       
@@ -80,7 +79,5 @@ jobs:
         with:
           name: aix-extension-build
           path: |
-            out/**/*.aix
             out/*.aix
             build/external_comps/**/*.aix
-            build/classes/*.json
