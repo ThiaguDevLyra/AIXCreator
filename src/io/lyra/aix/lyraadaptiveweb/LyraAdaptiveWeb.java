@@ -1,24 +1,25 @@
 package io.lyra.aix.lyraadaptiveweb;
 
-import com.google.appinventor.components.annotations.*;
-import com.google.appinventor.components.common.ComponentCategory;
-import com.google.appinventor.components.runtime.*;
-import com.google.appinventor.components.runtime.util.*;
+import android.app.Activity;
+import android.graphics.Bitmap;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewTreeObserver;
+import android.view.WindowManager;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.webkit.WebSettings;
-import android.webkit.WebChromeClient;
-import android.graphics.Rect;
-import android.app.Activity;
-import android.widget.FrameLayout;
-import android.content.Context;
+
+import com.google.appinventor.components.annotations.*;
+import com.google.appinventor.components.common.ComponentCategory;
+import com.google.appinventor.components.common.PropertyTypeConstants;
+import com.google.appinventor.components.runtime.*;
+import com.google.appinventor.components.runtime.util.*;
 
 @DesignerComponent(
     version = 1,
-    description = "Gerado pelo Lyra AIX Creator - Extensão para Lyra Adaptive Web com ajuste automático de teclado.",
+    description = "Gerado pelo Lyra AIX Creator",
     category = ComponentCategory.EXTENSION,
     nonVisible = true,
     iconName = "images/extension.png"
@@ -27,161 +28,156 @@ import android.content.Context;
 @UsesPermissions(permissionNames = "android.permission.INTERNET")
 public class LyraAdaptiveWeb extends AndroidNonvisibleComponent {
 
-    private final Context context;
-    private final Activity activity;
+    private Activity activity;
     private WebView webView;
-    private ViewGroup containerView;
-    private boolean isKeyboardVisible = false;
-    private int originalHeight = -1;
+    private ComponentContainer container;
+    private boolean adaptKeyboard = true;
 
     public LyraAdaptiveWeb(ComponentContainer container) {
         super(container.$form());
-        this.context = container.$context();
-        this.activity = (Activity) container.$context();
-    }
-
-    @SimpleFunction(description = "Inicializa o WebViewer adaptativo dentro de um container (ex: Legenda ou Arranjo).")
-    public void Initialize(AndroidViewComponent container) {
-        this.containerView = (ViewGroup) container.getView();
+        this.container = container;
+        this.activity = container.$context();
         
-        webView = new WebView(context);
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(true);
-        settings.setSupportZoom(true);
-        settings.setBuiltInZoomControls(true);
-        settings.setDisplayZoomControls(false);
-        settings.setUseWideViewPort(true);
-        settings.setLoadWithOverviewMode(true);
-
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                PageLoaded(url);
-            }
-
-            @Override
-            public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-                ErrorOccurred(description);
-            }
-        });
-
-        webView.setWebChromeClient(new WebChromeClient());
-
-        containerView.addView(webView, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-        ));
-
-        setupKeyboardListener();
+        // Apply default keyboard adaptation
+        AdaptToKeyboard(true);
     }
 
-    private void setupKeyboardListener() {
-        final View rootView = activity.getWindow().getDecorView().findViewById(android.R.id.content);
-        rootView.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
-            @Override
-            public void onGlobalLayout() {
-                Rect r = new Rect();
-                rootView.getWindowVisibleDisplayFrame(r);
-                int screenHeight = rootView.getRootView().getHeight();
-                int keypadHeight = screenHeight - r.bottom;
+    @DesignerProperty(editorType = PropertyTypeConstants.PROPERTY_TYPE_BOOLEAN, defaultValue = "True")
+    @SimpleProperty(description = "Se verdadeiro, a tela se redimensiona para não ser coberta pelo teclado virtual.")
+    public void AdaptToKeyboard(boolean adapt) {
+        this.adaptKeyboard = adapt;
+        if (adapt) {
+            activity.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        } else {
+            activity.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN);
+        }
+    }
 
-                if (keypadHeight > screenHeight * 0.15) { // Teclado aberto
-                    if (!isKeyboardVisible) {
-                        isKeyboardVisible = true;
-                        KeyboardStatusChanged(true, keypadHeight);
-                        adjustWebViewHeight(screenHeight - keypadHeight);
-                    }
-                } else { // Teclado fechado
-                    if (isKeyboardVisible) {
-                        isKeyboardVisible = false;
-                        KeyboardStatusChanged(false, 0);
-                        resetWebViewHeight();
-                    }
+    @SimpleProperty(description = "Retorna se a adaptação ao teclado está ativada.")
+    public boolean AdaptToKeyboard() {
+        return this.adaptKeyboard;
+    }
+
+    @SimpleFunction(description = "Cria o WebViewer customizado dentro de um arranjo (ex: HorizontalArrangement ou VerticalArrangement).")
+    public void CreateWebView(AndroidViewComponent layout) {
+        if (webView != null) {
+            ViewGroup parent = (ViewGroup) webView.getParent();
+            if (parent != null) {
+                parent.removeView(webView);
+            }
+        } else {
+            webView = new WebView(activity);
+            WebSettings webSettings = webView.getSettings();
+            webSettings.setJavaScriptEnabled(true);
+            webSettings.setDomStorageEnabled(true);
+            webSettings.setLoadWithOverviewMode(true);
+            webSettings.setUseWideViewPort(true);
+            webSettings.setBuiltInZoomControls(true);
+            webSettings.setDisplayZoomControls(false);
+            webSettings.setAllowFileAccess(true);
+            webSettings.setAllowContentAccess(true);
+
+            webView.setWebViewClient(new WebViewClient() {
+                @Override
+                public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                    activity.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            PageStarted(url);
+                        }
+                    });
                 }
-            }
-        });
-    }
 
-    private void adjustWebViewHeight(int newHeight) {
-        if (webView != null) {
-            ViewGroup.LayoutParams params = webView.getLayoutParams();
-            if (originalHeight == -1) originalHeight = params.height;
-            params.height = newHeight;
-            webView.setLayoutParams(params);
-            webView.requestLayout();
+                @Override
+                public void onPageFinished(WebView view, String url) {
+                    activity.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            PageLoaded(url);
+                        }
+                    });
+                }
+
+                @Override
+                public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
+                    activity.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            ErrorOccurred(errorCode, description, failingUrl);
+                        }
+                    });
+                }
+            });
+
+            webView.setWebChromeClient(new WebChromeClient());
+        }
+
+        View view = layout.getView();
+        if (view instanceof ViewGroup) {
+            ViewGroup viewGroup = (ViewGroup) view;
+            viewGroup.addView(webView, new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
         }
     }
 
-    private void resetWebViewHeight() {
+    @SimpleFunction(description = "Navega para a URL especificada.")
+    public void GoToUrl(String url) {
         if (webView != null) {
-            ViewGroup.LayoutParams params = webView.getLayoutParams();
-            params.height = ViewGroup.LayoutParams.MATCH_PARENT;
-            webView.setLayoutParams(params);
-            webView.requestLayout();
-        }
-    }
-
-    @SimpleFunction(description = "Carrega uma URL no WebViewer.")
-    public void LoadUrl(String url) {
-        if (webView != null) {
-            if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                url = "https://" + url;
-            }
             webView.loadUrl(url);
         }
     }
 
-    @SimpleFunction(description = "Executa um código JavaScript no WebViewer.")
-    public void EvaluateJavaScript(final String script) {
-        if (webView != null) {
-            activity.runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    webView.evaluateJavascript(script, null);
-                }
-            });
+    @SimpleFunction(description = "Volta para a página anterior, se possível.")
+    public void GoBack() {
+        if (webView != null && webView.canGoBack()) {
+            webView.goBack();
+        }
+    }
+
+    @SimpleFunction(description = "Avança para a próxima página, se possível.")
+    public void GoForward() {
+        if (webView != null && webView.canGoForward()) {
+            webView.goForward();
         }
     }
 
     @SimpleFunction(description = "Recarrega a página atual.")
     public void Reload() {
-        if (webView != null) webView.reload();
+        if (webView != null) {
+            webView.reload();
+        }
     }
 
-    @SimpleFunction(description = "Volta para a página anterior se possível.")
-    public void GoBack() {
-        if (webView != null && webView.canGoBack()) webView.goBack();
+    @SimpleFunction(description = "Executa um código JavaScript na página atual.")
+    public void EvaluateJavaScript(String script) {
+        if (webView != null) {
+            webView.evaluateJavascript(script, new ValueCallback<String>() {
+                @Override
+                public void onReceiveValue(String value) {
+                    JavaScriptEvaluated(value);
+                }
+            });
+        }
     }
 
-    @SimpleFunction(description = "Avança para a próxima página se possível.")
-    public void GoForward() {
-        if (webView != null && webView.canGoForward()) webView.goForward();
+    @SimpleEvent(description = "Disparado quando a página começa a carregar.")
+    public void PageStarted(String url) {
+        EventDispatcher.dispatchEvent(this, "PageStarted", url);
     }
 
-    @SimpleProperty(description = "Define se o JavaScript está habilitado.")
-    public void JavaScriptEnabled(boolean enabled) {
-        if (webView != null) webView.getSettings().setJavaScriptEnabled(enabled);
-    }
-
-    @SimpleEvent(description = "Evento disparado quando uma página termina de carregar.")
+    @SimpleEvent(description = "Disparado quando a página termina de carregar.")
     public void PageLoaded(String url) {
         EventDispatcher.dispatchEvent(this, "PageLoaded", url);
     }
 
-    @SimpleEvent(description = "Evento disparado quando ocorre um erro no carregamento.")
-    public void ErrorOccurred(String message) {
-        EventDispatcher.dispatchEvent(this, "ErrorOccurred", message);
+    @SimpleEvent(description = "Disparado quando ocorre um erro ao carregar a página.")
+    public void ErrorOccurred(int errorCode, String description, String failingUrl) {
+        EventDispatcher.dispatchEvent(this, "ErrorOccurred", errorCode, description, failingUrl);
     }
 
-    @SimpleEvent(description = "Evento disparado quando o status do teclado muda.")
-    public void KeyboardStatusChanged(boolean visible, int height) {
-        EventDispatcher.dispatchEvent(this, "KeyboardStatusChanged", visible, height);
-    }
-
-    @SimpleProperty(description = "Retorna a URL atual.")
-    public String CurrentUrl() {
-        return webView != null ? webView.getUrl() : "";
+    @SimpleEvent(description = "Disparado após a execução de um código JavaScript, retornando o resultado.")
+    public void JavaScriptEvaluated(String result) {
+        EventDispatcher.dispatchEvent(this, "JavaScriptEvaluated", result);
     }
 }
