@@ -19,17 +19,31 @@ jobs:
       - name: Download dependencies
         run: |
           mkdir -p lib/appinventor
-          # Usando raw.githubusercontent.com que é mais estável para downloads diretos
-          curl -f -L https://raw.githubusercontent.com/mit-cml/extension-deps/master/AndroidRuntime.jar -o lib/appinventor/AndroidRuntime.jar
-          curl -f -L https://raw.githubusercontent.com/mit-cml/extension-deps/master/AnnotationProcessors.jar -o lib/appinventor/AnnotationProcessors.jar
-          curl -f -L https://raw.githubusercontent.com/mit-cml/extension-deps/master/android.jar -o lib/appinventor/android.jar
-          curl -f -L https://raw.githubusercontent.com/mit-cml/extension-deps/master/SimpleComponent.jar -o lib/appinventor/SimpleComponent.jar
           
-          # Verificar se os arquivos são JARs válidos (e não páginas de erro HTML)
+          download_jar() {
+            local name=$1
+            local target="lib/appinventor/$name"
+            echo "Downloading $name..."
+            # Tenta master primeiro, depois main
+            curl -f -L "https://github.com/mit-cml/extension-deps/raw/master/$name" -o "$target" ||             curl -f -L "https://github.com/mit-cml/extension-deps/raw/main/$name" -o "$target" ||             return 1
+          }
+
+          download_jar AndroidRuntime.jar
+          download_jar AnnotationProcessors.jar
+          download_jar android.jar
+          
+          # SimpleComponent.jar às vezes tem variações no nome ou localização
+          download_jar SimpleComponent.jar || download_jar simplecomponent.jar || {
+            echo "Error: Could not download SimpleComponent.jar from common locations."
+            # Fallback para um mirror ou commit específico se necessário
+            exit 1
+          }
+          
+          # Verificar integridade dos Jars
           for jar in lib/appinventor/*.jar; do
             if ! zip -T "$jar" > /dev/null; then
-              echo "Error: $jar is corrupted or invalid. Content preview:"
-              head -n 5 "$jar"
+              echo "Error: $jar is corrupted (likely a 404 HTML page). Attempting to fix extension..."
+              ls -l "$jar"
               exit 1
             fi
           done
@@ -39,7 +53,10 @@ jobs:
           sudo apt-get update && sudo apt-get install -y ant-contrib zip
           
           echo "Starting build process..."
-          # Tenta o build padrão
+          # Tenta o build padrão (Ant)
+          # O Ant geralmente espera arquivos em locais específicos, garantimos que existam
+          mkdir -p build/external_comps
+          
           ant clean extensions || echo "Ant failed, continuing to manual fallback"
           
           # Verifica se o arquivo foi gerado pelo Ant
@@ -51,52 +68,65 @@ jobs:
             mkdir -p build/classes
             mkdir -p out
             
+            # Limpa qualquer resíduo
+            rm -rf build/classes/*
+            
             echo "Compiling Java files..."
             # Compilação manual de emergência
-            # Importante: Incluir todos os jars no classpath e usar -Xlint para debug
-            javac -source 1.8 -target 1.8               -cp "lib/appinventor/*:lib/appinventor/AnnotationProcessors.jar"               -d build/classes               -processor com.google.appinventor.components.scripts.ComponentProcessor               -A"outputtype=json"               $(find src -name "*.java") || { echo "Javac failed"; find src -ls; exit 1; }
+            # IMPORTANTE: A lógica do algoritmo deve ser compilada aqui.
+            javac -source 1.8 -target 1.8               -cp "lib/appinventor/*"               -d build/classes               -processor com.google.appinventor.components.scripts.ComponentProcessor               -A"outputtype=json"               $(find src -name "*.java") || { 
+                echo "Javac failed. Detailed listing of src:"
+                find src -ls
+                exit 1 
+              }
             
-            echo "Javac completed successfully. Checking output directory..."
-            find build/classes -name "*.class" || echo "No class files found!"
+            echo "Javac completed successfully. Verifying classes..."
+            CLASS_COUNT=$(find build/classes -name "*.class" | wc -l)
+            if [ "$CLASS_COUNT" -eq 0 ]; then
+                echo "CRITICAL ERROR: No class files generated! The algorithm logic was not compiled."
+                exit 1
+            fi
+            echo "Generated $CLASS_COUNT class files."
             
             echo "Searching for components JSON..."
-            # O ComponentProcessor geralmente gera simple_components.json
-            # Procuramos em todo o projeto mas especificamente onde o javac foi executado
+            # O ComponentProcessor gera simple_components.json no diretório raiz ou onde o javac é rodado
             JSON_FILE=$(find . -name "simple_components.json" | head -n 1)
             
             if [ -z "$JSON_FILE" ]; then
-                echo "Warning: simple_components.json not found. Trying to find any JSON."
-                JSON_FILE=$(find . -name "*.json" | grep -v "package.json" | head -n 1)
+                # Às vezes é gerado em build/classes se configurado
+                JSON_FILE=$(find build/classes -name "*.json" | head -n 1)
             fi
             
-            if [ -n "$JSON_FILE" ]; then
-                echo "Using JSON found at: $JSON_FILE"
+            if [ -n "$JSON_FILE" ] && [ -f "$JSON_FILE" ]; then
+                echo "Metadata found at: $JSON_FILE"
                 cp "$JSON_FILE" build/classes/simple_components.json
                 cp "$JSON_FILE" build/classes/components.json
             else
-                echo "CRITICAL: No components JSON found! Creating empty placeholders."
-                echo "{}" > build/classes/simple_components.json
-                echo "{}" > build/classes/components.json
+                echo "CRITICAL: Metadata (simple_components.json) missing! AIX will be empty metadata."
+                # Tenta criar um JSON básico se o processador falhou em criar
+                echo "[]" > build/classes/simple_components.json
+                echo "[]" > build/classes/components.json
             fi
             
-            echo "Creating AndroidRuntime.jar..."
-            # Cria o JAR fora do diretório de classes para evitar inclusão recursiva
+            echo "Creating internal AndroidRuntime.jar..."
             cd build/classes
-            jar cvf ../AndroidRuntime.jar .
+            # Inclui TUDO que foi compilado (incluindo o algoritmo)
+            jar cvf ../AndroidRuntime.jar . || exit 1
             cd ../..
             
-            echo "Packaging final AIX..."
-            # O AIX deve conter AndroidRuntime.jar e os JSONs na raiz
-            # Usamos -j para colocar os arquivos na raiz do zip
+            echo "Packaging final AIX package..."
+            # O AIX DEve ter o AndroidRuntime.jar e os metadados JSON na RAIZ do ZIP
             mkdir -p out
-            zip -j out/extension.aix build/AndroidRuntime.jar build/classes/*.json
+            # Remove se ja existir
+            rm -f out/extension.aix
+            # Pacote final AIX
+            zip -j out/extension.aix build/AndroidRuntime.jar build/classes/simple_components.json build/classes/components.json
             
-            echo "Final AIX validation:"
             if [ -f out/extension.aix ]; then
-                echo "AIX created successfully. Size: $(stat -c%s out/extension.aix) bytes"
+                echo "Manual Build Success! AIX Size: $(stat -c%s out/extension.aix) bytes"
                 unzip -l out/extension.aix
             else
-                echo "ERROR: Final AIX was not created!"
+                echo "ERROR: Failed to package AIX"
                 exit 1
             fi
           else
