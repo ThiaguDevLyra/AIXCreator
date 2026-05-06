@@ -34,12 +34,18 @@ jobs:
             mkdir -p out
             
             # Compilação manual com processador de anotações
+            # O processador precisa das bibliotecas no classpath
             javac -source 1.8 -target 1.8               -cp "lib/appinventor/*"               -d build/classes               -processor com.google.appinventor.components.scripts.ComponentProcessor               -A"outputtype=json"               $(find src -name "*.java")
             
             # O processador gera arquivos como simple_components.json em build/classes
-            # Vamos garantir que todos os arquivos necessários estejam na raiz do jar/aix
+            # Vamos garantir que os arquivos JSON estejam na RAIZ do AIX
+            # E vamos duplicar simple_components.json para components.json para garantir compatibilidade
             cd build/classes
-            # Empacota tudo recursivamente
+            if [ -f simple_components.json ]; then
+              cp simple_components.json components.json
+            fi
+            
+            # Empacota tudo recursivamente garantindo que os JSONs estejam na raiz
             jar cvf ../../out/extension.aix .
             cd ../..
           fi
@@ -52,5 +58,4 @@ jobs:
             out/**/*.aix
             out/*.aix
             build/external_comps/**/*.aix
-            build/classes/simple_components.json
-            build/classes/components.json
+            build/classes/*.json
