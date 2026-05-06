@@ -1,8 +1,5 @@
-name: AIX Builder
-on:
-  push:
-    paths:
-      - 'src/**'
+name: Build AIX Extension
+on: [push]
 
 jobs:
   build:
@@ -10,19 +7,23 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Set up JDK 8
+      - name: Set up Java
         uses: actions/setup-java@v3
         with:
           java-version: '8'
           distribution: 'temurin'
 
+      - name: Setup Folders and Download Libs
+        run: |
+          mkdir -p lib
+          # Baixa as dependências oficiais do repositório que você achou
+          wget -O lib/AndroidRuntime.jar https://github.com/mit-cml/extension-deps/raw/master/lib/AndroidRuntime.jar
+          
       - name: Build with Ant
-        run: |
-          # Você precisa ter o template de extensão (Ant) no seu repo
-          ant clean
-          ant extensions
-
-      - name: Update project in Firebase
-        run: |
-          # Aqui você usaria um script para avisar o Lyra que o build terminou
-          # e enviar o link do arquivo .aix gerado em /out/
+        run: ant
+        
+      - name: Upload AIX Result
+        uses: actions/upload-artifact@v3
+        with:
+          name: Extension-AIX
+          path: out/*.aix
