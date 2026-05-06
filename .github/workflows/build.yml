@@ -26,34 +26,53 @@ jobs:
       
       - name: Build with Ant
         run: |
-          sudo apt-get update && sudo apt-get install -y ant-contrib
-          # Tenta o build padrão. Se falhar, tentamos compilar manualmente com o processador de anotações
+          sudo apt-get update && sudo apt-get install -y ant-contrib zip
+          # Tenta o build padrão. Se falhar, tentamos compilar manualmente
           if ! ant clean extensions; then
-            echo "Ant build failed, attempting manual compilation with Annotation Processor..."
+            echo "Ant build failed, attempting manual compilation..."
             mkdir -p build/classes
             mkdir -p out
             
-            # Compilação manual com processador de anotações
-            # O processador precisa das bibliotecas no classpath
-            javac -source 1.8 -target 1.8               -cp "lib/appinventor/*"               -d build/classes               -processor com.google.appinventor.components.scripts.ComponentProcessor               -A"outputtype=json"               $(find src -name "*.java") || { echo "Javac failed"; exit 1; }
+            # Compilação manual
+            # Nota: O processador de anotações pode gerar arquivos em caminhos diferentes dependendo da versão
+            javac -source 1.8 -target 1.8               -cp "lib/appinventor/*"               -d build/classes               -processor com.google.appinventor.components.scripts.ComponentProcessor               -A"outputtype=json"               $(find src -name "*.java") || { echo "Javac failed"; find src -ls; exit 1; }
             
-            # O processador gera arquivos como simple_components.json
-            # Dependendo da versão, ele pode gerar no diretório atual ou em build/classes
-            # Vamos procurar por ele e garantir que esteja onde precisamos
+            echo "Javac success. Searching for built files..."
+            find build/classes -ls
+            
+            # Localiza o arquivo JSON gerado pelo processador
+            # O ComponentProcessor gera simple_components.json. Vamos procurar em todo o projeto.
             JSON_FILE=$(find . -name "simple_components.json" | head -n 1)
-            if [ -n "$JSON_FILE" ]; then
-              cp "$JSON_FILE" build/classes/simple_components.json
-              cp "$JSON_FILE" build/classes/components.json
+            if [ -z "$JSON_FILE" ]; then
+              echo "Error: simple_components.json not found anywhere!"
+              find . -name "*.json"
+              exit 1
             fi
             
-            cd build/classes
-            # Cria o AndroidRuntime.jar com as classes
-            jar cvf AndroidRuntime.jar $(find . -name "*.class")
+            echo "Using JSON from: $JSON_FILE"
+            # Copiamos para a raiz do build/classes para facilitar a criação do ZIP/AIX
+            cp "$JSON_FILE" build/classes/simple_components.json
+            cp "$JSON_FILE" build/classes/components.json || true
             
-            # Empacota o AIX final com o jar e os jsons na raiz. 
-            # O arquivo AIX deve ser um ZIP renomeado.
-            zip -r ../../out/extension.aix AndroidRuntime.jar *.json
+            cd build/classes
+            # 1. Cria o AndroidRuntime.jar contendo as classes COM a estrutura de pacotes
+            # Note o '.' no final - ele inclui tudo recursivamente
+            jar cvf AndroidRuntime.jar .
+            
+            echo "AndroidRuntime.jar created. Verifying content:"
+            jar tvf AndroidRuntime.jar | head -n 20
+            
+            # 2. Cria o AIX final contendo o JAR e os JSONs na raiz
+            # O arquivo AIX deve ser um ZIP com estes arquivos na raiz.
+            # Kodular e outros criadores de extensões esperam estes arquivos.
+            zip -j ../../out/extension.aix AndroidRuntime.jar simple_components.json components.json
+            
             cd ../..
+            echo "Build manual finalizado. Conteúdo do AIX gerado:"
+            unzip -l out/extension.aix
+            
+            # Garante que o artefato esteja no lugar esperado para o passo de upload
+            # (Já está em out/extension.aix)
           fi
       
       - name: Upload AIX
