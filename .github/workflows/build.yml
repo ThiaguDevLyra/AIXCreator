@@ -35,18 +35,24 @@ jobs:
             
             # Compilação manual com processador de anotações
             # O processador precisa das bibliotecas no classpath
-            javac -source 1.8 -target 1.8               -cp "lib/appinventor/*"               -d build/classes               -processor com.google.appinventor.components.scripts.ComponentProcessor               -A"outputtype=json"               $(find src -name "*.java")
+            javac -source 1.8 -target 1.8               -cp "lib/appinventor/*"               -d build/classes               -processor com.google.appinventor.components.scripts.ComponentProcessor               -A"outputtype=json"               $(find src -name "*.java") || { echo "Javac failed"; exit 1; }
             
-            # O processador gera arquivos como simple_components.json em build/classes
-            # Vamos garantir que os arquivos JSON estejam na RAIZ do AIX
-            # E vamos duplicar simple_components.json para components.json para garantir compatibilidade
-            cd build/classes
-            if [ -f simple_components.json ]; then
-              cp simple_components.json components.json
+            # O processador gera arquivos como simple_components.json
+            # Dependendo da versão, ele pode gerar no diretório atual ou em build/classes
+            # Vamos procurar por ele e garantir que esteja onde precisamos
+            JSON_FILE=$(find . -name "simple_components.json" | head -n 1)
+            if [ -n "$JSON_FILE" ]; then
+              cp "$JSON_FILE" build/classes/simple_components.json
+              cp "$JSON_FILE" build/classes/components.json
             fi
             
-            # Empacota tudo recursivamente garantindo que os JSONs estejam na raiz
-            jar cvf ../../out/extension.aix .
+            cd build/classes
+            # Cria o AndroidRuntime.jar com as classes
+            jar cvf AndroidRuntime.jar $(find . -name "*.class")
+            
+            # Empacota o AIX final com o jar e os jsons na raiz. 
+            # O arquivo AIX deve ser um ZIP renomeado.
+            zip -r ../../out/extension.aix AndroidRuntime.jar *.json
             cd ../..
           fi
       
