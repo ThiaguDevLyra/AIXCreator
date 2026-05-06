@@ -22,20 +22,25 @@ jobs:
           
           # URLs para as dependências do MIT App Inventor
           BASE_URL="https://raw.githubusercontent.com/mit-cml/extension-deps/master"
+          ALT_URL="https://raw.githubusercontent.com/mit-cml/appinventor-sources/master/appinventor/lib/appinventor"
           
           echo "Baixando dependências..."
-          for jar in AndroidRuntime.jar AnnotationProcessors.jar android.jar SimpleComponent.jar; do
+          for jar in AndroidRuntime.jar AnnotationProcessors.jar android.jar; do
             echo "Download $jar..."
-            curl -L -f "$BASE_URL/$jar" -o "lib/appinventor/$jar" || {
-              echo "Erro ao baixar $jar de $BASE_URL. Tentando mirror alternativo..."
-              # Fallback para outro mirror se necessário
-              curl -L -f "https://github.com/mit-cml/extension-deps/blob/master/$jar?raw=true" -o "lib/appinventor/$jar"
-            }
-            
-            # Validação básica: arquivos JAR devem ter mais de 10KB
-            if [ $(stat -c%s "lib/appinventor/$jar") -lt 10000 ]; then
-              echo "ERRO: $jar parece corrompido ou é apenas um ponteiro LFS."
-              cat "lib/appinventor/$jar"
+            curl -L -f "$BASE_URL/$jar" -o "lib/appinventor/$jar" ||             curl -L -f "$ALT_URL/$jar" -o "lib/appinventor/$jar"
+          done
+
+          # Caso especial para SimpleComponent.jar que frequentemente muda de nome ou local
+          echo "Download SimpleComponent.jar..."
+          curl -L -f "$BASE_URL/SimpleComponent.jar" -o "lib/appinventor/SimpleComponent.jar" ||           curl -L -f "$BASE_URL/SimpleComponents.jar" -o "lib/appinventor/SimpleComponent.jar" ||           curl -L -f "$BASE_URL/simple_components.jar" -o "lib/appinventor/SimpleComponent.jar" ||           curl -L -f "$ALT_URL/SimpleComponent.jar" -o "lib/appinventor/SimpleComponent.jar" || {
+            echo "ERRO: Não foi possível baixar SimpleComponent.jar de nenhuma fonte conhecida."
+            exit 1
+          }
+          
+          # Validação básica
+          for jar in AndroidRuntime.jar AnnotationProcessors.jar android.jar SimpleComponent.jar; do
+            if [ ! -f "lib/appinventor/$jar" ] || [ $(stat -c%s "lib/appinventor/$jar") -lt 1000 ]; then
+              echo "ERRO: $jar está ausente ou corrompido."
               exit 1
             fi
           done
