@@ -26,17 +26,31 @@ jobs:
       
       - name: Build with Ant
         run: |
-          # Garante que bibliotecas necessárias existam (Ant-Contrib)
           sudo apt-get update && sudo apt-get install -y ant-contrib
-          # Tenta o build padrão do template MIT
-          ant clean extensions || ant clean all || (mkdir -p out && jar cvf out/extension.aix -C build/classes .)
+          # Tenta o build padrão. Se falhar, tentamos compilar manualmente com o processador de anotações
+          if ! ant clean extensions; then
+            echo "Ant build failed, attempting manual compilation with Annotation Processor..."
+            mkdir -p build/classes
+            mkdir -p out
+            
+            # Compilação manual com processador de anotações
+            javac -source 1.8 -target 1.8               -cp "lib/appinventor/*"               -d build/classes               -processor com.google.appinventor.components.scripts.ComponentProcessor               -A"outputtype=json"               $(find src -name "*.java")
+            
+            # O processador gera arquivos como simple_components.json em build/classes
+            # Vamos garantir que todos os arquivos necessários estejam na raiz do jar/aix
+            cd build/classes
+            # Empacota tudo recursivamente
+            jar cvf ../../out/extension.aix .
+            cd ../..
+          fi
       
       - name: Upload AIX
         uses: actions/upload-artifact@v4
         with:
           name: aix-extension-build
           path: |
-            out/external_comps/**/io.lyra.aix.*.aix
-            out/**.aix
-            build/external_comps/**.aix
-            build/classes/**/*.class
+            out/**/*.aix
+            out/*.aix
+            build/external_comps/**/*.aix
+            build/classes/simple_components.json
+            build/classes/components.json
