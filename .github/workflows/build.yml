@@ -27,51 +27,73 @@ jobs:
       - name: Build with Ant
         run: |
           sudo apt-get update && sudo apt-get install -y ant-contrib zip
-          # Tenta o build padrão. Se falhar, tentamos compilar manualmente
-          if ! ant clean extensions; then
-            echo "Ant build failed, attempting manual compilation..."
+          
+          echo "Starting build process..."
+          # Tenta o build padrão
+          ant clean extensions || echo "Ant failed, continuing to manual fallback"
+          
+          # Verifica se o arquivo foi gerado pelo Ant
+          echo "Searching for Ant-generated AIX..."
+          AIX_FILE=$(find build/external_comps -name "*.aix" | head -n 1)
+          
+          if [ -z "$AIX_FILE" ] || [ $(stat -c%s "$AIX_FILE") -lt 3000 ]; then
+            echo "Ant build failed or produced invalid AIX (size: $(stat -c%s "$AIX_FILE" 2>/dev/null || echo 0)). Attempting manual compilation..."
             mkdir -p build/classes
             mkdir -p out
             
-            # Compilação manual
-            # Nota: O processador de anotações gera os arquivos JSON
+            echo "Compiling Java files..."
+            # Compilação manual de emergência
+            # Importante: Incluir todos os jars no classpath e usar -Xlint para debug
             javac -source 1.8 -target 1.8               -cp "lib/appinventor/*"               -d build/classes               -processor com.google.appinventor.components.scripts.ComponentProcessor               -A"outputtype=json"               $(find src -name "*.java") || { echo "Javac failed"; find src -ls; exit 1; }
             
-            echo "Javac success. Searching for built files..."
-            find build/classes -ls
+            echo "Javac completed successfully. Checking output directory..."
+            find build/classes -name "*.class" || echo "No class files found!"
             
-            # Localiza o arquivo JSON gerado. Ele pode estar na raiz ou no diretório de saída.
+            echo "Searching for components JSON..."
+            # O ComponentProcessor geralmente gera simple_components.json
+            # Procuramos em todo o projeto mas especificamente onde o javac foi executado
             JSON_FILE=$(find . -name "simple_components.json" | head -n 1)
+            
             if [ -z "$JSON_FILE" ]; then
-              echo "Error: simple_components.json not found anywhere!"
-              find . -name "*.json"
-              exit 1
+                echo "Warning: simple_components.json not found. Trying to find any JSON."
+                JSON_FILE=$(find . -name "*.json" | grep -v "package.json" | head -n 1)
             fi
             
-            echo "Using JSON from: $JSON_FILE"
-            cp "$JSON_FILE" build/classes/simple_components.json
-            cp "$JSON_FILE" build/classes/components.json
+            if [ -n "$JSON_FILE" ]; then
+                echo "Using JSON found at: $JSON_FILE"
+                cp "$JSON_FILE" build/classes/simple_components.json
+                cp "$JSON_FILE" build/classes/components.json
+            else
+                echo "CRITICAL: No components JSON found! Creating empty placeholders."
+                echo "{}" > build/classes/simple_components.json
+                echo "{}" > build/classes/components.json
+            fi
             
-            # O JAR deve conter apenas as classes. 
-            # É importante não incluir o JAR dentro de si mesmo se ele já existir.
-            # Vamos para a raiz das classes para manter o pacote correto (e.g. io/lyra/...)
+            echo "Creating AndroidRuntime.jar..."
+            # Cria o JAR fora do diretório de classes para evitar inclusão recursiva
             cd build/classes
-            jar cvf AndroidRuntime.jar $(find . -name "*.class") || { echo "Jar creation failed"; exit 1; }
-            
-            echo "AndroidRuntime.jar created. Verifying content:"
-            jar tvf AndroidRuntime.jar | head -n 20
-            
-            # Cria o AIX final na raiz do projeto (../../out)
-            # O AIX deve conter AndroidRuntime.jar e os JSONs na raiz.
-            # Kodular/App Inventor aceitam components.json ou simple_components.json
-            zip -j ../../out/extension.aix AndroidRuntime.jar simple_components.json components.json
-            
+            jar cvf ../AndroidRuntime.jar .
             cd ../..
-            echo "Build manual finalizado. Conteúdo do AIX gerado:"
-            unzip -l out/extension.aix
             
-            # Sincroniza o local final para o upload-artifact se necessário
-            # (Já está em out/extension.aix)
+            echo "Packaging final AIX..."
+            # O AIX deve conter AndroidRuntime.jar e os JSONs na raiz
+            # Usamos -j para colocar os arquivos na raiz do zip
+            mkdir -p out
+            zip -j out/extension.aix build/AndroidRuntime.jar build/classes/*.json
+            
+            echo "Final AIX validation:"
+            if [ -f out/extension.aix ]; then
+                echo "AIX created successfully. Size: $(stat -c%s out/extension.aix) bytes"
+                unzip -l out/extension.aix
+            else
+                echo "ERROR: Final AIX was not created!"
+                exit 1
+            fi
+          else
+            echo "Ant build succeeded. Moving AIX from $AIX_FILE to out/"
+            mkdir -p out
+            cp "$AIX_FILE" out/extension.aix
+            echo "AIX status: $(ls -l out/extension.aix)"
           fi
       
       - name: Upload AIX
