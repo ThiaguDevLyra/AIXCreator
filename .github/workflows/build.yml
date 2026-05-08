@@ -13,7 +13,7 @@ jobs:
           cache: maven
       - name: Build with Maven
         run: mvn package
-      - name: Upload AIX Artifact
+      - name: Upload AIX
         uses: actions/upload-artifact@v4
         with:
           name: extension-aix
