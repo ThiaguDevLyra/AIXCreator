@@ -1,22 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="LyraWebView" default="extensions">
-    <property name="extension.pkg" value="com.lyra.webview" />
-    <property name="extension.class" value="LyraWebView" />
+<project name="ExampleExtension" default="all">
+    <property name="extension.name" value="com.lyra.example.ExampleExtension" />
     <property name="lib.dir" value="lib" />
+    <property name="src.dir" value="src" />
     <property name="build.dir" value="build" />
     <property name="dist.dir" value="dist" />
-    <property name="public.dir" value="public" />
 
-    <target name="extensions">
+    <target name="init">
         <mkdir dir="${build.dir}" />
         <mkdir dir="${dist.dir}" />
-        <javac srcdir="src" destdir="${build.dir}" includeantruntime="false" target="1.8" source="1.8">
+    </target>
+
+    <target name="compile" depends="init">
+        <javac srcdir="${src.dir}" destdir="${build.dir}" target="1.8" source="1.8" debug="true">
             <classpath>
-                <fileset dir="${lib.dir}" includes="*.jar" />
+                <fileset dir="${lib.dir}">
+                    <include name="**/*.jar" />
+                </fileset>
             </classpath>
         </javac>
-        <jar destfile="${dist.dir}/${extension.pkg}.aix">
-            <fileset dir="${build.dir}" />
-        </jar>
+    </target>
+
+    <target name="all" depends="compile">
+        <jar destfile="${dist.dir}/${extension.name}.aix" basedir="${build.dir}" />
     </target>
 </project>
