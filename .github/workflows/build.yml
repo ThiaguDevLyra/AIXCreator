@@ -5,29 +5,33 @@ on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up JDK 8
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: '8'
           distribution: 'temurin'
 
-      - name: Install Dependencies
+      - name: Install Ant
+        run: sudo apt-get update && sudo apt-get install ant -y
+
+      - name: Prepare Dependencies
         run: |
           mkdir -p lib
-          curl -L https://github.com/mit-cml/extension-sdk/raw/master/lib/deps/deps.zip -o deps.zip
-          unzip deps.zip -d lib/
-          rm deps.zip
+          if [ -z "$(ls -A lib)" ]; then
+            wget https://github.com/mit-cml/extension-sdk/raw/master/lib/deps/deps.zip
+            unzip deps.zip -d lib/
+            mv lib/deps/* lib/
+          fi
 
       - name: Build with Ant
         run: ant
 
-      - name: Upload AIX
-        uses: actions/upload-artifact@v3
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: LyraWebView-Extension
-          path: build/*.aix
+          name: extension-out
+          path: out/
