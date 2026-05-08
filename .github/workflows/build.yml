@@ -6,32 +6,22 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up JDK 8
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v3
         with:
           java-version: '8'
           distribution: 'temurin'
 
-      - name: Install Ant
-        run: sudo apt-get update && sudo apt-get install ant -y
-
-      - name: Prepare Dependencies
+      - name: Install Dependencies
         run: |
           mkdir -p lib
-          if [ -z "$(ls -A lib)" ]; then
-            wget https://github.com/mit-cml/extension-sdk/raw/master/lib/deps/deps.zip
-            unzip deps.zip -d lib/
-            mv lib/deps/* lib/
-          fi
+          # Downloading required AI2 SDK dependencies if not present
+          wget https://github.com/mit-cml/extension-sdk/raw/master/lib/deps/deps.zip -O lib/deps.zip
+          unzip lib/deps.zip -d lib/
+          rm lib/deps.zip
 
       - name: Build with Ant
         run: ant
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: extension-out
-          path: out/
