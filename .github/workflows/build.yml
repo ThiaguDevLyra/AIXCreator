@@ -6,22 +6,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Set up JDK 8
         uses: actions/setup-java@v3
         with:
           java-version: '8'
           distribution: 'temurin'
-
       - name: Install Dependencies
         run: |
-          mkdir -p lib
+          mkdir -p lib/deps
           curl -L https://github.com/mit-cml/extension-sdk/raw/master/lib/deps/deps.zip -o deps.zip
-          unzip -o deps.zip -d lib/
-          # Ensure the jars are in the root of /lib for the Ant build
-          find lib -name "*.jar" -exec mv {} lib/ \;
-
-      - name: Build with Ant
+          unzip -o deps.zip -d lib/deps/
+      - name: Build Extension with Ant
         run: ant
