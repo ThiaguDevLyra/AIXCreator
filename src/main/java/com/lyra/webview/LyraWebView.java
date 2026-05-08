@@ -1,5 +1,6 @@
 package com.lyra.webview;
 
+import android.content.Context;
 import android.view.View;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -10,54 +11,80 @@ import com.google.appinventor.components.annotations.SimpleObject;
 import com.google.appinventor.components.annotations.SimpleProperty;
 import com.google.appinventor.components.common.ComponentCategory;
 import com.google.appinventor.components.common.PropertyTypeConstants;
-import com.google.appinventor.components.runtime.AndroidNonvisibleComponent;
 import com.google.appinventor.components.runtime.AndroidViewComponent;
 import com.google.appinventor.components.runtime.ComponentContainer;
 
-@DesignerComponent(
-    version = 1,
-    description = "Lyra WebView: Uma simples extensão de webview customizada.",
+@DesignerComponent(version = 1,
+    description = "A simple WebView component powered by Lyra Intelligence.",
     category = ComponentCategory.EXTENSION,
     nonVisible = false,
-    iconName = "images/extension.png"
-)
+    iconName = "images/extension.png")
 @SimpleObject(external = true)
 public class LyraWebView extends AndroidViewComponent {
+
     private final WebView webView;
 
     public LyraWebView(ComponentContainer container) {
         super(container);
         this.webView = new WebView(container.$context());
+        this.webView.setWebViewClient(new WebViewClient());
         this.webView.getSettings().setJavaScriptEnabled(true);
         this.webView.getSettings().setDomStorageEnabled(true);
-        this.webView.setWebViewClient(new WebViewClient());
         container.$add(this);
     }
 
     @Override
     public View getView() {
-        return this.webView;
+        return webView;
     }
 
-    @SimpleFunction(description = "Carrega a URL especificada na WebView.")
+    @SimpleFunction(description = "Navigates to the specified URL.")
     public void GoToUrl(String url) {
-        this.webView.loadUrl(url);
+        webView.loadUrl(url);
     }
 
-    @SimpleProperty(description = "Retorna a URL atual.")
-    public String CurrentUrl() {
-        return this.webView.getUrl();
-    }
-
-    @SimpleFunction(description = "Recarrega a página atual.")
-    public void Reload() {
-        this.webView.reload();
-    }
-
-    @SimpleFunction(description = "Volta para a página anterior, se possível.")
+    @SimpleFunction(description = "Goes back in history.")
     public void GoBack() {
-        if (this.webView.canGoBack()) {
-            this.webView.goBack();
+        if (webView.canGoBack()) {
+            webView.goBack();
         }
+    }
+
+    @SimpleFunction(description = "Goes forward in history.")
+    public void GoForward() {
+        if (webView.canGoForward()) {
+            webView.goForward();
+        }
+    }
+
+    @SimpleFunction(description = "Reloads the current page.")
+    public void Reload() {
+        webView.reload();
+    }
+
+    @SimpleFunction(description = "Stops the current loading.")
+    public void StopLoading() {
+        webView.stopLoading();
+    }
+
+    @SimpleProperty(description = "Returns the current URL.")
+    public String CurrentUrl() {
+        return webView.getUrl();
+    }
+
+    @SimpleProperty(description = "Returns true if the WebView can go back.")
+    public boolean CanGoBack() {
+        return webView.canGoBack();
+    }
+
+    @SimpleProperty(description = "Returns true if the WebView can go forward.")
+    public boolean CanGoForward() {
+        return webView.canGoForward();
+    }
+
+    @DesignerProperty(editorType = PropertyTypeConstants.PROPERTY_TYPE_STRING, defaultValue = "")
+    @SimpleProperty
+    public void HomeUrl(String url) {
+        webView.loadUrl(url);
     }
 }
