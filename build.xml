@@ -1,32 +1,22 @@
-<?xml version="1.0"?>
-<project name="ExtensionBuilder" default="extensions">
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="LyraWebView" default="extensions">
+    <property name="extension.pkg" value="com.lyra.webview" />
+    <property name="extension.class" value="LyraWebView" />
     <property name="lib.dir" value="lib" />
     <property name="build.dir" value="build" />
-    <property name="classes.dir" value="${build.dir}/classes" />
-    <property name="dist.dir" value="out" />
+    <property name="dist.dir" value="dist" />
+    <property name="public.dir" value="public" />
 
-    <target name="clean">
-        <delete dir="${build.dir}" />
-        <delete dir="${dist.dir}" />
-    </target>
-
-    <target name="prepare">
-        <mkdir dir="${classes.dir}" />
+    <target name="extensions">
+        <mkdir dir="${build.dir}" />
         <mkdir dir="${dist.dir}" />
-    </target>
-
-    <target name="compile" depends="prepare">
-        <javac srcdir="src" destdir="${classes.dir}" includeantruntime="false">
+        <javac srcdir="src" destdir="${build.dir}" includeantruntime="false" target="1.8" source="1.8">
             <classpath>
-                <fileset dir="${lib.dir}">
-                    <include name="**/*.jar" />
-                </fileset>
+                <fileset dir="${lib.dir}" includes="*.jar" />
             </classpath>
         </javac>
-    </target>
-
-    <target name="extensions" depends="compile">
-        <jar destfile="${dist.dir}/extension.aix" basedir="${classes.dir}" />
-        <echo message="Compilação concluída! Arquivo gerado em out/extension.aix" />
+        <jar destfile="${dist.dir}/${extension.pkg}.aix">
+            <fileset dir="${build.dir}" />
+        </jar>
     </target>
 </project>

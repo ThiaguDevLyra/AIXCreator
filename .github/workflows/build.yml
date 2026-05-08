@@ -1,145 +1,22 @@
-name: Build AIX Extension
-on:
-  push:
-    paths:
-      - 'src/**'
+name: Build Extension
+
+on: [push]
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      
+      - uses: actions/checkout@v3
       - name: Set up JDK 8
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v3
         with:
           java-version: '8'
           distribution: 'temurin'
-
-      - name: Download dependencies
+      - name: Download Extension SDK Libs
         run: |
-          mkdir -p lib/appinventor
-          
-          download_jar() {
-            local name=$1
-            local target="lib/appinventor/$name"
-            echo "Downloading $name..."
-            # Tenta master primeiro, depois main
-            curl -f -L "https://github.com/mit-cml/extension-deps/raw/master/$name" -o "$target" ||             curl -f -L "https://github.com/mit-cml/extension-deps/raw/main/$name" -o "$target" ||             return 1
-          }
-
-          download_jar AndroidRuntime.jar
-          download_jar AnnotationProcessors.jar
-          download_jar android.jar
-          
-          # SimpleComponent.jar às vezes tem variações no nome ou localização
-          download_jar SimpleComponent.jar || download_jar simplecomponent.jar || {
-            echo "Error: Could not download SimpleComponent.jar from common locations."
-            # Fallback para um mirror ou commit específico se necessário
-            exit 1
-          }
-          
-          # Verificar integridade dos Jars
-          for jar in lib/appinventor/*.jar; do
-            if ! zip -T "$jar" > /dev/null; then
-              echo "Error: $jar is corrupted (likely a 404 HTML page). Attempting to fix extension..."
-              ls -l "$jar"
-              exit 1
-            fi
-          done
-      
+          mkdir -p lib
+          curl -L https://github.com/mit-cml/extension-sdk/raw/master/lib/deps/deps.zip -o lib/deps.zip
+          unzip lib/deps.zip -d lib/
+          rm lib/deps.zip
       - name: Build with Ant
-        run: |
-          sudo apt-get update && sudo apt-get install -y ant-contrib zip
-          
-          echo "Starting build process..."
-          # Tenta o build padrão (Ant)
-          # O Ant geralmente espera arquivos em locais específicos, garantimos que existam
-          mkdir -p build/external_comps
-          
-          ant clean extensions || echo "Ant failed, continuing to manual fallback"
-          
-          # Verifica se o arquivo foi gerado pelo Ant
-          echo "Searching for Ant-generated AIX..."
-          AIX_FILE=$(find build/external_comps -name "*.aix" 2>/dev/null | head -n 1)
-          
-          if [ -z "$AIX_FILE" ] || [ ! -f "$AIX_FILE" ] || [ $(stat -c%s "$AIX_FILE") -lt 3000 ]; then
-            echo "Ant build failed or produced invalid AIX (size: $(stat -c%s "$AIX_FILE" 2>/dev/null || echo 0)). Attempting manual compilation..."
-            mkdir -p build/classes
-            mkdir -p out
-            
-            # Limpa qualquer resíduo
-            rm -rf build/classes/*
-            
-            echo "Compiling Java files..."
-            # Compilação manual de emergência
-            # IMPORTANTE: A lógica do algoritmo deve ser compilada aqui.
-            javac -source 1.8 -target 1.8               -cp "lib/appinventor/*"               -d build/classes               -processor com.google.appinventor.components.scripts.ComponentProcessor               -A"outputtype=json"               $(find src -name "*.java") || { 
-                echo "Javac failed. Detailed listing of src:"
-                find src -ls
-                exit 1 
-              }
-            
-            echo "Javac completed successfully. Verifying classes..."
-            CLASS_COUNT=$(find build/classes -name "*.class" | wc -l)
-            if [ "$CLASS_COUNT" -eq 0 ]; then
-                echo "CRITICAL ERROR: No class files generated! The algorithm logic was not compiled."
-                exit 1
-            fi
-            echo "Generated $CLASS_COUNT class files."
-            
-            echo "Searching for components JSON..."
-            # O ComponentProcessor gera simple_components.json no diretório raiz ou onde o javac é rodado
-            JSON_FILE=$(find . -name "simple_components.json" | head -n 1)
-            
-            if [ -z "$JSON_FILE" ]; then
-                # Às vezes é gerado em build/classes se configurado
-                JSON_FILE=$(find build/classes -name "*.json" | head -n 1)
-            fi
-            
-            if [ -n "$JSON_FILE" ] && [ -f "$JSON_FILE" ]; then
-                echo "Metadata found at: $JSON_FILE"
-                cp "$JSON_FILE" build/classes/simple_components.json
-                cp "$JSON_FILE" build/classes/components.json
-            else
-                echo "CRITICAL: Metadata (simple_components.json) missing! AIX will be empty metadata."
-                # Tenta criar um JSON básico se o processador falhou em criar
-                echo "[]" > build/classes/simple_components.json
-                echo "[]" > build/classes/components.json
-            fi
-            
-            echo "Creating internal AndroidRuntime.jar..."
-            cd build/classes
-            # Inclui TUDO que foi compilado (incluindo o algoritmo)
-            jar cvf ../AndroidRuntime.jar . || exit 1
-            cd ../..
-            
-            echo "Packaging final AIX package..."
-            # O AIX DEve ter o AndroidRuntime.jar e os metadados JSON na RAIZ do ZIP
-            mkdir -p out
-            # Remove se ja existir
-            rm -f out/extension.aix
-            # Pacote final AIX
-            zip -j out/extension.aix build/AndroidRuntime.jar build/classes/simple_components.json build/classes/components.json
-            
-            if [ -f out/extension.aix ]; then
-                echo "Manual Build Success! AIX Size: $(stat -c%s out/extension.aix) bytes"
-                unzip -l out/extension.aix
-            else
-                echo "ERROR: Failed to package AIX"
-                exit 1
-            fi
-          else
-            echo "Ant build succeeded. Moving AIX from $AIX_FILE to out/"
-            mkdir -p out
-            cp "$AIX_FILE" out/extension.aix
-            echo "AIX status: $(ls -l out/extension.aix)"
-          fi
-      
-      - name: Upload AIX
-        uses: actions/upload-artifact@v4
-        with:
-          name: aix-extension-build
-          path: |
-            out/*.aix
-            build/external_comps/**/*.aix
+        run: ant
