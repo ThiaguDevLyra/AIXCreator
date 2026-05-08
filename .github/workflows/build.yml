@@ -1,10 +1,10 @@
-name: Build Lyra Extension
+name: Build Extension
 on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up JDK 8
         uses: actions/setup-java@v3
         with:
@@ -13,8 +13,8 @@ jobs:
           cache: maven
       - name: Build with Maven
         run: mvn package
-      - name: Upload AIX
-        uses: actions/upload-artifact@v3
+      - name: Upload AIX Artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: LyraWebView-AIX
+          name: extension-aix
           path: target/*.aix
