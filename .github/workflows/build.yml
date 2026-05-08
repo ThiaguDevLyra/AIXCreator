@@ -5,8 +5,9 @@ on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Set up JDK 8
@@ -15,13 +16,14 @@ jobs:
           java-version: '8'
           distribution: 'temurin'
 
-      - name: Install Dependencies
+      - name: Setup Extension SDK
         run: |
-          mkdir -p lib
-          # Downloading required AI2 SDK dependencies if not present
-          wget https://github.com/mit-cml/extension-sdk/raw/master/lib/deps/deps.zip -O lib/deps.zip
-          unzip lib/deps.zip -d lib/
-          rm lib/deps.zip
+          mkdir -p lib/deps
+          cd lib/deps
+          wget -O deps.zip https://github.com/mit-cml/extension-sdk/raw/master/lib/deps/deps.zip
+          unzip deps.zip
+          rm deps.zip
+          cd ../..
 
       - name: Build with Ant
         run: ant

@@ -1,42 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="ExampleExtension" default="all">
-    <property name="extension.mainclass" value="com.lyra.example.ExampleExtension" />
+<project name="MathUtils" default="all">
+    <property name="extension.name" value="com.lyra.utils.MathUtils" />
+    <property name="src.dir" value="src" />
     <property name="lib.dir" value="lib" />
     <property name="build.dir" value="build" />
     <property name="dist.dir" value="dist" />
-    <property name="public.deps.url" value="https://github.com/mit-cml/extension-sdk/raw/master/lib/deps/deps.zip" />
+    <property name="public.deps.dir" value="lib/deps" />
 
-    <target name="all" depends="clean, prepare, compile, dex, bundle" />
+    <target name="all" depends="clean, compile, dist" />
 
     <target name="clean">
         <delete dir="${build.dir}" />
         <delete dir="${dist.dir}" />
     </target>
 
-    <target name="prepare">
-        <mkdir dir="${build.dir}" />
-        <mkdir dir="${build.dir}/classes" />
-        <mkdir dir="${dist.dir}" />
-        <mkdir dir="${lib.dir}" />
-    </target>
-
     <target name="compile">
-        <javac srcdir="src" destdir="${build.dir}/classes" includeantruntime="false" target="1.8" source="1.8">
+        <mkdir dir="${build.dir}" />
+        <javac srcdir="${src.dir}" destdir="${build.dir}" includeantruntime="false" target="1.8" source="1.8">
             <classpath>
-                <fileset dir="${lib.dir}">
-                    <include name="**/*.jar" />
-                </fileset>
+                <fileset dir="${public.deps.dir}" includes="*.jar" />
             </classpath>
         </javac>
     </target>
 
-    <target name="dex">
-        <!-- Simplified dex logic for skeleton -->
-    </target>
-
-    <target name="bundle">
-        <jar destfile="${dist.dir}/${ant.project.name}.aix">
-            <fileset dir="${build.dir}/classes" />
-        </jar>
+    <target name="dist">
+        <mkdir dir="${dist.dir}" />
+        <jar destfile="${dist.dir}/${extension.name}.aix" basedir="${build.dir}" />
     </target>
 </project>
