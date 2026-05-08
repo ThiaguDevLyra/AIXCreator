@@ -5,7 +5,6 @@ on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -16,14 +15,13 @@ jobs:
           java-version: '8'
           distribution: 'temurin'
 
-      - name: Setup Extension SDK
+      - name: Install Dependencies
         run: |
-          mkdir -p lib/deps
-          cd lib/deps
-          wget -O deps.zip https://github.com/mit-cml/extension-sdk/raw/master/lib/deps/deps.zip
-          unzip deps.zip
-          rm deps.zip
-          cd ../..
+          mkdir -p lib
+          curl -L https://github.com/mit-cml/extension-sdk/raw/master/lib/deps/deps.zip -o deps.zip
+          unzip -o deps.zip -d lib/
+          # Ensure the jars are in the root of /lib for the Ant build
+          find lib -name "*.jar" -exec mv {} lib/ \;
 
       - name: Build with Ant
         run: ant

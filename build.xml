@@ -1,30 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="MathUtils" default="all">
-    <property name="extension.name" value="com.lyra.utils.MathUtils" />
-    <property name="src.dir" value="src" />
+<project name="LyraExtension" default="all">
+    <property name="extension.pkg" value="com.lyra.extension" />
+    <property name="extension.class" value="MyExtension" />
     <property name="lib.dir" value="lib" />
     <property name="build.dir" value="build" />
     <property name="dist.dir" value="dist" />
-    <property name="public.deps.dir" value="lib/deps" />
+    <property name="public.dir" value="public" />
 
-    <target name="all" depends="clean, compile, dist" />
+    <target name="all" depends="compile, jar" />
 
-    <target name="clean">
-        <delete dir="${build.dir}" />
-        <delete dir="${dist.dir}" />
+    <target name="init">
+        <mkdir dir="${build.dir}" />
+        <mkdir dir="${dist.dir}" />
     </target>
 
-    <target name="compile">
-        <mkdir dir="${build.dir}" />
-        <javac srcdir="${src.dir}" destdir="${build.dir}" includeantruntime="false" target="1.8" source="1.8">
+    <target name="compile" depends="init">
+        <javac srcdir="src" destdir="${build.dir}" includeantruntime="false" source="1.8" target="1.8">
             <classpath>
-                <fileset dir="${public.deps.dir}" includes="*.jar" />
+                <fileset dir="${lib.dir}">
+                    <include name="**/*.jar" />
+                </fileset>
             </classpath>
         </javac>
     </target>
 
-    <target name="dist">
-        <mkdir dir="${dist.dir}" />
-        <jar destfile="${dist.dir}/${extension.name}.aix" basedir="${build.dir}" />
+    <target name="jar" depends="compile">
+        <jar destfile="${dist.dir}/${extension.pkg}.aix">
+            <fileset dir="${build.dir}" />
+        </jar>
     </target>
 </project>
